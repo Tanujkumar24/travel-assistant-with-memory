@@ -1,126 +1,79 @@
 
-# 🧳 Travel Memory Agent with Long-Term & Short-Term Memory
+# Travel Assistant with Long-Term & Short-Term Memory
 
-## 📌 Overview
-This project is an **AI-powered Travel Assistant** built using **LangGraph, LangChain, RedisVL, and OpenAI**.  
-It features **short-term memory** for conversation context and **long-term memory** to store user preferences, travel history, and constraints for highly personalized travel recommendations.
+## Overview
+This project implements an AI-powered **Travel Assistant** that uses:
+- **LangGraph** for orchestrating the ReAct agent
+- **Redis** for both **short-term conversation memory** and **long-term semantic/episodic memory**
+- **OpenAI embeddings** for semantic search in Redis
+- **Tool execution** for storing and retrieving memories dynamically
+- **Conversation summarization** to preserve important details while managing LLM context limits
+
+The assistant can:
+1. Remember your travel preferences and experiences
+2. Retrieve relevant memories in future conversations
+3. Recommend personalized activities, routes, and booking suggestions
+4. Maintain context across multiple sessions
 
 ---
 
-## 🚀 Features
-- **ReAct-based LangGraph Agent** with tool execution
-- **Short-term memory** via RedisSaver
-- **Long-term memory** with RedisVL + OpenAI embeddings
-- **Automatic conversation summarization**
-- **Memory deduplication** to prevent storing duplicate info
-- **Tool-enabled** for booking help, travel recommendations, and memory retrieval
-- **Personalized travel suggestions** based on stored preferences
+## Architecture
+
+```mermaid
+graph TD
+    A[User] --> B[Travel Assistant]
+    B --> C[LangGraph Workflow]
+    C --> D[Redis Short-Term Memory<br>(RedisSaver)]
+    C --> E[Redis Long-Term Memory<br>(RedisVL + Vector Embeddings)]
+    E -->|Stores & Retrieves| F[Semantic + Episodic Memories]
+    C --> G[LLM Agent (ReAct)]
+    G --> H[Tool Execution Layer]
+    H --> I[Store Memory Tool]
+    H --> J[Retrieve Memory Tool]
+    J -->|Semantic Search| E
+    I -->|Vector Embedding| E
+    C --> K[Conversation Summarizer]
+    K --> E
+```
 
 ---
 
-## 🛠 Architecture Diagram
+## Workflow
 
 ```mermaid
 flowchart LR
-    subgraph User
-        U[User Input]
+    subgraph User Interaction
+        A1[User Message] --> B1[Respond to User Node]
     end
 
-    subgraph LangGraph Agent
-        A1[Agent Node: Respond to User]
-        A2[Execute Tools Node]
-        A3[Summarize Conversation Node]
+    subgraph LLM Agent
+        B1 --> C1[AI Generates Response or Tool Call]
+        C1 -->|Tool Call| D1[Execute Tools Node]
+        C1 -->|No Tool Call| E1[Summarize Conversation Node]
     end
 
     subgraph Memory
-        STM[Short-Term Memory: RedisSaver]
-        LTM[Long-Term Memory: RedisVL + Vector DB]
+        D1 --> F1[Store Memory Tool] --> G1[Redis Long-Term Memory]
+        D1 --> H1[Retrieve Memory Tool] --> G1
+        E1 --> G1
     end
 
-    subgraph External APIs
-        TOOLS[Custom Tools: store_memory, retrieve_memories]
-        OPENAI[OpenAI API for LLM + Embeddings]
-    end
-
-    U --> A1
-    A1 -->|LLM Calls| OPENAI
-    A1 -->|Tool Call Decision| A2
-    A2 --> TOOLS
-    TOOLS --> LTM
-    A3 --> STM
-    STM <--> LangGraph Agent
-    LTM <--> LangGraph Agent
+    G1 -->|Vector Search| D1
 ```
 
 ---
 
-## 📜 Conversation Workflow in LangGraph
+## Code Highlights
 
-```mermaid
-stateDiagram-v2
-    [*] --> RespondToUser
-    RespondToUser --> ExecuteTools: If AI message contains tool calls
-    RespondToUser --> SummarizeConversation: If no tool call
-    ExecuteTools --> RespondToUser: Continue conversation
-    SummarizeConversation --> [*]: End turn
-```
+### 1. **Checking for Similar Memories**
+Before storing a new memory, we ensure it’s not already stored.
 
----
-
-## 💾 Memory Storage & Retrieval Flow
-
-```mermaid
-flowchart TD
-    subgraph User Input
-        Q[User Message]
-    end
-
-    Q --> E1[Extract Important Info]
-    E1 --> C1[Check Similar Memory Exists?]
-    C1 -->|Yes| SKIP[Skip Storage]
-    C1 -->|No| VEC[Generate Embedding via OpenAI]
-    VEC --> STORE[Store Memory in RedisVL with Metadata]
-    STORE --> INDEX[Indexed for Semantic Search]
-    
-    subgraph Retrieval
-        SEARCH[Query for Relevant Memories]
-        SEARCH --> EMB[Embed Query via OpenAI]
-        EMB --> FILTER[Filter by MemoryType, UserID, ThreadID]
-        FILTER --> MATCH[Vector Similarity Search in RedisVL]
-        MATCH --> RESULT[Return Relevant Memories to Agent]
-    end
-```
-
----
-
-## 🔧 Tool Execution Flow
-
-```mermaid
-flowchart LR
-    subgraph LangGraph Agent
-        AI[AIMessage with Tool Calls]
-        ET[Execute Tools Node]
-    end
-
-    AI --> ET
-    ET --> FND[Find Tool by Name]
-    FND -->|Tool Found| RUN[Invoke Tool with Args]
-    FND -->|Tool Not Found| ERR[Error: Unknown Tool]
-    RUN --> RES[Return Tool Result as ToolMessage]
-    RES --> AI
-```
-
----
-
-## 🧩 Key Code Components
-
-### 1️⃣ Checking for Similar Memories
 ```python
-def similar_memory_exists(content, memory_type, user_id, thread_id=None, distance_threshold=0.1):
+def similar_memory_exists(content, memory_type, user_id=SYSTEM_USER_ID, thread_id=None, distance_threshold=0.1):
     content_embedding = openai_embed.embed(content)
     filters = (Tag("user_id") == user_id) & (Tag("memory_type") == memory_type)
     if thread_id:
-        filters &= Tag("thread_id") == thread_id
+        filters = filters & (Tag("thread_id") == thread_id)
 
     vector_query = VectorRangeQuery(
         vector=content_embedding,
@@ -134,9 +87,11 @@ def similar_memory_exists(content, memory_type, user_id, thread_id=None, distanc
     return bool(results)
 ```
 
-### 2️⃣ Storing a Memory
+### 2. **Storing Memory**
+We store user memories in Redis with embeddings for semantic search.
+
 ```python
-def store_memory(content, memory_type, user_id, thread_id=None, metadata=None):
+def store_memory(content, memory_type, user_id=SYSTEM_USER_ID, thread_id=None, metadata=None):
     if similar_memory_exists(content, memory_type, user_id, thread_id):
         return
     embedding = openai_embed.embed(content)
@@ -146,46 +101,74 @@ def store_memory(content, memory_type, user_id, thread_id=None, metadata=None):
         "memory_type": memory_type.value,
         "metadata": metadata or "{}",
         "embedding": embedding,
+        "memory_id": str(ulid.ULID()),
+        "thread_id": thread_id,
     }
     long_term_memory_index.load([memory_data])
 ```
 
-### 3️⃣ Retrieving Memories
+### 3. **Retrieving Memories**
+Semantic + metadata filtering for relevant past information.
+
 ```python
-def retrieve_memories(query, memory_type=None, user_id="system", thread_id=None, distance_threshold=0.1, limit=5):
+def retrieve_memories(query, memory_type=None, user_id=SYSTEM_USER_ID, thread_id=None, limit=5):
     vector_query = VectorRangeQuery(
         vector=openai_embed.embed(query),
-        return_fields=["content", "memory_type", "metadata"],
         num_results=limit,
         vector_field_name="embedding",
-        distance_threshold=distance_threshold,
+        distance_threshold=0.3,
     )
-    results = long_term_memory_index.query(vector_query)
-    return results
+    base_filters = [f"@user_id:{{{user_id}}}"]
+    if memory_type:
+        if isinstance(memory_type, list):
+            base_filters.append(f"@memory_type:{{{'|'.join(memory_type)}}}")
+        else:
+            base_filters.append(f"@memory_type:{{{memory_type.value}}}")
+    if thread_id:
+        base_filters.append(f"@thread_id:{{{thread_id}}}")
+    vector_query.set_filter(" ".join(base_filters))
+    return long_term_memory_index.query(vector_query)
 ```
 
 ---
 
-## 🏁 How it Works (Step-by-Step)
-1. **User sends a travel-related query**
-2. **Agent processes the input** → Decides if it needs tools
-3. **If tool needed** → Executes `store_memory_tool` or `retrieve_memories_tool`
-4. **If no tool needed** → Responds directly
-5. **Conversation summarization** every 6 messages to manage context
-6. **Long-term memories** stored in RedisVL for personalization
+## Example Conversation Flow
+
+1. **User:** "I like Delta Airlines and prefer window seats."
+   - Assistant stores this as an **episodic memory**.
+   
+2. **User:** "Book me a flight to Singapore."
+   - Assistant recalls airline preference → suggests Delta routes.
+
+3. **User:** "No shellfish dishes for my wife."
+   - Assistant stores dietary restriction as episodic memory.
+
+4. **User:** "Plan a Sunday in Singapore for us."
+   - Assistant uses stored preferences for a **personalized itinerary**.
 
 ---
 
-## 📌 Tech Stack
-- **LangGraph** → Agent workflow
-- **LangChain** → LLM integration
-- **OpenAI GPT-4o** → LLM + embeddings
-- **RedisVL** → Long-term memory vector storage
-- **RedisSaver** → Short-term conversation memory
-- **Python**
+## Key Technologies
+- **LangGraph** – LLM orchestration
+- **RedisVL** – Vector similarity search
+- **RedisSaver** – Short-term conversation checkpointing
+- **OpenAI** – Embeddings + LLM
+- **Python** – Core implementation
+- **Mermaid.js** – Diagrams
 
 ---
 
-## 📜 License
-MIT License © 2025
+## Installation
+
+```bash
+git clone <your-repo-url>
+cd <repo-folder>
+pip install -r requirements.txt
+python main.py
+```
+
+---
+
+## License
+MIT License
 
