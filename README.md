@@ -88,6 +88,48 @@ flowchart LR
 
     G1 -->|Vector Search| D1
 ```
+## 💾 Memory Storage & Retrieval Flow
+
+```mermaid
+flowchart TD
+    subgraph User Input
+        Q[User Message]
+    end
+
+    Q --> E1[Extract Important Info]
+    E1 --> C1[Check Similar Memory Exists?]
+    C1 -->|Yes| SKIP[Skip Storage]
+    C1 -->|No| VEC[Generate Embedding via OpenAI]
+    VEC --> STORE[Store Memory in RedisVL with Metadata]
+    STORE --> INDEX[Indexed for Semantic Search]
+    
+    subgraph Retrieval
+        SEARCH[Query for Relevant Memories]
+        SEARCH --> EMB[Embed Query via OpenAI]
+        EMB --> FILTER[Filter by MemoryType, UserID, ThreadID]
+        FILTER --> MATCH[Vector Similarity Search in RedisVL]
+        MATCH --> RESULT[Return Relevant Memories to Agent]
+    end
+```
+
+---
+
+## 🔧 Tool Execution Flow
+
+```mermaid
+flowchart LR
+    subgraph LangGraph Agent
+        AI[AIMessage with Tool Calls]
+        ET[Execute Tools Node]
+    end
+
+    AI --> ET
+    ET --> FND[Find Tool by Name]
+    FND -->|Tool Found| RUN[Invoke Tool with Args]
+    FND -->|Tool Not Found| ERR[Error: Unknown Tool]
+    RUN --> RES[Return Tool Result as ToolMessage]
+    RES --> AI
+```
 
 ---
 
