@@ -39,6 +39,39 @@ graph TD
     E --> C
     F --> G[Conversation Archived]
 ```
+## High-Level System Architecture
+```mermaid
+flowchart LR
+    subgraph User
+        U[User Input]
+    end
+
+    subgraph LangGraph Agent
+        A1[Agent Node: Respond to User]
+        A2[Execute Tools Node]
+        A3[Summarize Conversation Node]
+    end
+
+    subgraph Memory
+        STM[Short-Term Memory: RedisSaver]
+        LTM[Long-Term Memory: RedisVL + Vector DB]
+    end
+
+    subgraph External APIs
+        TOOLS[Custom Tools: store_memory, retrieve_memories]
+        OPENAI[OpenAI API for LLM + Embeddings]
+    end
+
+    U --> A1
+    A1 -->|LLM Calls| OPENAI
+    A1 -->|Tool Call Decision| A2
+    A2 --> TOOLS
+    TOOLS --> LTM
+    A3 --> STM
+    STM <--> LangGraph Agent
+    LTM <--> LangGraph Agent
+
+```
 
 - **Node 1: respond_to_user** → LLM responds to user input
 - **Node 2: execute_tools** → If LLM decides to call tools (store/retrieve memory), this is triggered
