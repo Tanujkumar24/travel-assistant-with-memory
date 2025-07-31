@@ -31,7 +31,7 @@ It uses **LangGraph** to orchestrate the agent workflow, **Redis** for both **sh
 ---
 
 ## 🏗 System Architecture
-
+```mermaid
 flowchart TD
     subgraph UserInteraction[User Interaction]
         U[User]
@@ -65,3 +65,4 @@ flowchart TD
     StoreTool --> LTM
     RetrieveTool --> LTM
     LTM --> RetrieveTool
+```
