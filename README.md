@@ -32,24 +32,23 @@ It uses **LangGraph** to orchestrate the agent workflow, **Redis** for both **sh
 
 ## 🏗 System Architecture
 
-```mermaid
 flowchart TD
-    subgraph User Interaction
+    subgraph UserInteraction[User Interaction]
         U[User]
-        AI[AI Agent (LangGraph)]
+        AI[AI Agent - LangGraph]
     end
 
-    subgraph Memory Layers
-        STM[Short-Term Memory (RedisSaver)]
-        LTM[Long-Term Memory (Redis Vector Search)]
+    subgraph MemoryLayers[Memory Layers]
+        STM[Short-Term Memory - RedisSaver]
+        LTM[Long-Term Memory - Redis Vector Search]
     end
 
-    subgraph Tools
+    subgraph Tools[Tools]
         StoreTool[Store Memory Tool]
         RetrieveTool[Retrieve Memory Tool]
     end
 
-    subgraph Processing
+    subgraph Processing[Processing Workflow]
         RESP[Respond to User Node]
         TOOLS[Execute Tools Node]
         SUM[Summarize Conversation Node]
