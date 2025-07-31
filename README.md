@@ -113,24 +113,16 @@ flowchart TD
 ```
 
 ---
-
-## 🔧 Tool Execution Flow
+## 📜 Conversation Workflow in LangGraph
 
 ```mermaid
-flowchart LR
-    subgraph LangGraph Agent
-        AI[AIMessage with Tool Calls]
-        ET[Execute Tools Node]
-    end
-
-    AI --> ET
-    ET --> FND[Find Tool by Name]
-    FND -->|Tool Found| RUN[Invoke Tool with Args]
-    FND -->|Tool Not Found| ERR[Error: Unknown Tool]
-    RUN --> RES[Return Tool Result as ToolMessage]
-    RES --> AI
+stateDiagram-v2
+    [*] --> RespondToUser
+    RespondToUser --> ExecuteTools: If AI message contains tool calls
+    RespondToUser --> SummarizeConversation: If no tool call
+    ExecuteTools --> RespondToUser: Continue conversation
+    SummarizeConversation --> [*]: End turn
 ```
-
 ---
 
 ## Code Highlights
